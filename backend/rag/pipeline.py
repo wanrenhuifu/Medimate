@@ -39,8 +39,15 @@ async def index_documents(input_dir: str, batch_size: int = 32):
         return
 
     texts = [c["text"] for c in all_chunks]
-    print(f"Embedding {len(texts)} chunks...")
-    embeddings = embedder.embed_batch(texts)
+    print(f"Embedding {len(texts)} chunks in batches of {batch_size}...")
+
+    # Embed in batches to avoid exceeding API request size limits
+    embeddings = []
+    for i in range(0, len(texts), batch_size):
+        batch = texts[i:i + batch_size]
+        print(f"  batch {i // batch_size + 1}/{(len(texts) + batch_size - 1) // batch_size}: {len(batch)} texts")
+        batch_embeddings = await embedder.embed_batch(batch)
+        embeddings.extend(batch_embeddings)
 
     pool = await get_pool()
     async with pool.acquire() as conn:

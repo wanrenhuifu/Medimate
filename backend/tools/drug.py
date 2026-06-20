@@ -12,7 +12,7 @@ async def search_drug(session_id: str, args: dict) -> str:
     if not drug_name:
         return json.dumps({"found": False, "error": "请提供药物名称"}, ensure_ascii=False)
 
-    query_embedding = embedder.embed(drug_name)
+    query_embedding = await embedder.embed(drug_name)
     result = await rag_repo.search(drug_name, query_embedding)
 
     if result.found and result.drug:

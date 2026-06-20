@@ -15,11 +15,20 @@ class Session:
     async def add_message(self, msg: dict):
         async with self.lock:
             self.messages.append(msg)
-        self.last_active = time.time()
+            self.last_active = time.time()
 
     async def get_messages(self) -> list[dict]:
         async with self.lock:
             return list(self.messages)
+
+    async def ensure_system_prompt(self, prompt: str):
+        """Atomically check and insert system prompt if missing. Returns True if inserted."""
+        async with self.lock:
+            if not self.messages or self.messages[0].get("role") != "system":
+                self.messages.insert(0, {"role": "system", "content": prompt})
+                self.last_active = time.time()
+                return True
+            return False
 
     async def trim(self, max_turns: int = 20):
         """滑动窗口裁剪历史消息。

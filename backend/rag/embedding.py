@@ -8,7 +8,7 @@
 
 配置方式：在 .env 中设置 EMBEDDING_API_KEY / EMBEDDING_BASE_URL / EMBEDDING_MODEL
 """
-from openai import OpenAI
+from openai import AsyncOpenAI
 from config import config
 
 
@@ -16,7 +16,7 @@ class Embedder:
     """文本嵌入器（API 模式）。"""
 
     def __init__(self):
-        self._client = OpenAI(
+        self._client = AsyncOpenAI(
             api_key=config.embedding_api_key or config.deepseek_api_key,
             base_url=config.embedding_base_url or config.deepseek_base_url,
         )
@@ -29,15 +29,15 @@ class Embedder:
     def dimension(self) -> int:
         return self._dim
 
-    def embed(self, text: str) -> list[float]:
-        resp = self._client.embeddings.create(
+    async def embed(self, text: str) -> list[float]:
+        resp = await self._client.embeddings.create(
             model=self._model,
             input=text,
         )
         return resp.data[0].embedding
 
-    def embed_batch(self, texts: list[str]) -> list[list[float]]:
-        resp = self._client.embeddings.create(
+    async def embed_batch(self, texts: list[str]) -> list[list[float]]:
+        resp = await self._client.embeddings.create(
             model=self._model,
             input=texts,
         )

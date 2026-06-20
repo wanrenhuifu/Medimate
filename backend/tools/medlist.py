@@ -32,7 +32,7 @@ async def manage_medication_list(session_id: str, args: dict) -> str:
             return json.dumps(
                 {"error": "请指定要添加的药物名称"}, ensure_ascii=False
             )
-        drug_result = drug_repo.search(drug_name)
+        drug_result = await drug_repo.search(drug_name)
         if not drug_result.found or not drug_result.drug:
             return json.dumps(
                 {
@@ -50,7 +50,7 @@ async def manage_medication_list(session_id: str, args: dict) -> str:
             return json.dumps(
                 {"error": "请指定要移除的药物名称"}, ensure_ascii=False
             )
-        drug_result = drug_repo.search(drug_name)
+        drug_result = await drug_repo.search(drug_name)
         if not drug_result.found or not drug_result.drug:
             return json.dumps(
                 {"error": f"未找到药物「{drug_name}」，无法从清单移除"},

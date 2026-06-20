@@ -35,7 +35,8 @@ async def init_pg(dsn: str, vector_dim: int = 512) -> asyncpg.Pool:
                 session_id TEXT NOT NULL,
                 drug_id TEXT NOT NULL,
                 name_cn TEXT NOT NULL,
-                added_at TIMESTAMPTZ DEFAULT NOW()
+                added_at TIMESTAMPTZ DEFAULT NOW(),
+                UNIQUE(session_id, drug_id)
             )
         """)
         await conn.execute("""

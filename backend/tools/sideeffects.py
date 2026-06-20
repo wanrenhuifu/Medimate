@@ -31,6 +31,10 @@ EXCLUDE_TERMS = {"DRUG INEFFECTIVE", "PRODUCT QUALITY ISSUE"}
 async def query_side_effects(session_id: str, args: dict) -> str:
     drug_name = args.get("drug_name", "")
     top_n = args.get("top_n", 10)
+    try:
+        top_n = int(top_n)
+    except (TypeError, ValueError):
+        top_n = 10
 
     if not drug_name:
         return json.dumps(

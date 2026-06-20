@@ -7,10 +7,18 @@ import LoadingDots from './LoadingDots.vue'
 const store = useChatStore()
 const chatRef = ref(null)
 
-watch(() => store.messages.length, async () => {
-  await nextTick()
-  chatRef.value?.scrollTo({ top: chatRef.value.scrollHeight, behavior: 'smooth' })
-})
+// Scroll to bottom on new messages, tool results, or content updates
+watch(
+  () => [
+    store.messages.length,
+    store.currentToolCall,
+    ...store.messages.map(m => (m.role === 'assistant' ? m.content?.length ?? 0 : 0)),
+  ],
+  async () => {
+    await nextTick()
+    chatRef.value?.scrollTo({ top: chatRef.value.scrollHeight, behavior: 'smooth' })
+  }
+)
 </script>
 
 <template>

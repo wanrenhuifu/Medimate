@@ -40,10 +40,8 @@ class Agent:
         # 1. 获取/创建会话，添加用户消息
         session = await self.sessions.get_or_create(session_id)
 
-        # 确保 System Prompt 在第一条
-        existing = await session.get_messages()
-        if not existing or existing[0].get("role") != "system":
-            await session.add_message({"role": "system", "content": SYSTEM_PROMPT})
+        # 确保 System Prompt 在第一条（原子操作，避免并发重复插入）
+        await session.ensure_system_prompt(SYSTEM_PROMPT)
 
         await session.add_message({"role": "user", "content": user_message})
 

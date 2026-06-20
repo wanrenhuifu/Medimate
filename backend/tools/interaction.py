@@ -9,6 +9,20 @@ rag_repo = RagRepo(top_k=config.rag_top_k)
 
 SEVERE_KEYWORDS = ["禁用", "禁忌", "禁止联用", "严重", "致死", "中毒", "极高风险"]
 MILD_KEYWORDS = ["安全", "无相互作用", "可联用", "不影响", "未见", "暂无"]
+NEGATION_PATTERNS = ["无", "未", "不", "没有", "并非", "非"]
+
+
+def _is_negation_free(keyword: str, text: str) -> bool:
+    """Check if keyword appears in text without being negated."""
+    idx = text.find(keyword)
+    if idx == -1:
+        return False
+    # Check up to 3 characters before the keyword for negation
+    prefix = text[max(0, idx - 3):idx]
+    for neg in NEGATION_PATTERNS:
+        if neg in prefix:
+            return False
+    return True
 
 
 async def check_interaction(session_id: str, args: dict) -> str:
@@ -28,7 +42,7 @@ async def check_interaction(session_id: str, args: dict) -> str:
                 resolved.append({"name": exact.drug.name_cn, "en_name": exact.drug.name_en})
                 seen_names.add(exact.drug.name_cn)
         else:
-            q_emb = embedder.embed(name)
+            q_emb = await embedder.embed(name)
             semantic = await rag_repo.search(name, q_emb)
             if semantic.found and semantic.chunks:
                 best = semantic.chunks[0]
@@ -46,7 +60,7 @@ async def check_interaction(session_id: str, args: dict) -> str:
 
     for a, b in combinations(resolved, 2):
         query = f"{a['name']} 和 {b['name']} 相互作用 配伍禁忌 联合用药"
-        q_emb = embedder.embed(query)
+        q_emb = await embedder.embed(query)
         result = await rag_repo.search(query, q_emb)
 
         if result.found and result.chunks:
@@ -54,9 +68,9 @@ async def check_interaction(session_id: str, args: dict) -> str:
             content_lower = content.lower()
 
             severity = "moderate"
-            if any(kw in content_lower for kw in SEVERE_KEYWORDS):
+            if any(_is_negation_free(kw, content_lower) for kw in SEVERE_KEYWORDS):
                 severity = "severe"
-            elif any(kw in content_lower for kw in MILD_KEYWORDS):
+            elif any(_is_negation_free(kw, content_lower) for kw in MILD_KEYWORDS):
                 severity = "mild"
 
             interaction_results.append({

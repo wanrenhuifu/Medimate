@@ -41,7 +41,8 @@ class MedListRepo:
                 )
 
             await conn.execute(
-                "INSERT INTO medications (session_id, drug_id, name_cn) VALUES ($1, $2, $3)",
+                "INSERT INTO medications (session_id, drug_id, name_cn) VALUES ($1, $2, $3) "
+                "ON CONFLICT (session_id, drug_id) DO NOTHING",
                 session_id,
                 drug_id,
                 name_cn,

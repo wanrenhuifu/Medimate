@@ -47,8 +47,9 @@ const isEmergency = computed(() => {
         </template>
       </div>
 
-      <!-- Markdown Content -->
-      <div v-if="message.content" class="content" :class="{ raw: isUser }" v-html="isUser ? message.content : renderedContent"></div>
+      <!-- User messages: plain text (safe). Assistant messages: rendered markdown -->
+      <div v-if="message.content && isUser" class="content raw">{{ message.content }}</div>
+      <div v-else-if="message.content && isAssistant" class="content" v-html="renderedContent"></div>
 
       <!-- Streaming cursor -->
       <span v-if="isLast && message.role === 'assistant' && !message.content" class="cursor">|</span>

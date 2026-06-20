@@ -57,6 +57,8 @@ class RagRepo:
         )
 
     async def search_by_name(self, name: str) -> DrugSearchResult:
+        if not name or not name.strip():
+            return DrugSearchResult(found=False, chunks=[])
         pool = await get_pool()
         async with pool.acquire() as conn:
             row = await conn.fetchrow(

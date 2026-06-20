@@ -18,7 +18,7 @@ class DrugRepo:
             return exact
 
         # 2. 回退到语义向量搜索
-        query_embedding = embedder.embed(name)
+        query_embedding = await embedder.embed(name)
         return await self._rag.search(name, query_embedding)
 
 

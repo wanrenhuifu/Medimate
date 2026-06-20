@@ -6,7 +6,10 @@ const props = defineProps({
 })
 
 const reactions = computed(() => props.data.reactions || [])
-const maxCount = computed(() => Math.max(...reactions.value.map(r => r.count), 1))
+const maxCount = computed(() => {
+  const counts = reactions.value.map(r => r.count).filter(c => typeof c === 'number' && !isNaN(c))
+  return counts.length > 0 ? Math.max(...counts) : 1
+})
 </script>
 
 <template>
