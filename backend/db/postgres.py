@@ -29,6 +29,16 @@ async def init_pg(dsn: str, vector_dim: int = 512) -> asyncpg.Pool:
                 ON drug_chunks USING gin (aliases)
         """)
 
+        # IVFFlat 向量检索索引（数据少时可能失败，使用 try/catch）
+        try:
+            await conn.execute(f"""
+                CREATE INDEX IF NOT EXISTS idx_drug_chunks_embedding
+                    ON drug_chunks USING ivfflat (embedding vector_cosine_ops)
+                    WITH (lists = 10)
+            """)
+        except Exception:
+            pass  # 空表或数据太少时 IVFFlat 无法创建，pipeline 导入后会自动重建
+
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS medications (
                 id SERIAL PRIMARY KEY,
