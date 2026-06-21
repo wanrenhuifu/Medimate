@@ -29,5 +29,27 @@ class Config:
         self.rag_top_k: int = int(os.getenv("RAG_TOP_K", "5"))
         self.port: int = int(os.getenv("PORT", "8000"))
 
+    def validate(self) -> list[str]:
+        """检查关键配置是否已填写，返回警告列表。"""
+        warnings: list[str] = []
+
+        if not self.deepseek_api_key or "your-deepseek" in self.deepseek_api_key.lower():
+            warnings.append("DEEPSEEK_API_KEY 未配置（LLM 功能不可用）")
+
+        if not self.supabase_db_url:
+            warnings.append("SUPABASE_DB_URL 未配置（数据库功能不可用）")
+
+        embedding_key = self.embedding_api_key
+        if not embedding_key or "your-embedding" in embedding_key.lower() or "sk-your" in embedding_key.lower():
+            # 检查 fallback 是否可用
+            dsk = self.deepseek_api_key
+            if not dsk or "your-deepseek" in dsk.lower():
+                warnings.append(
+                    "EMBEDDING_API_KEY 未配置，且 DeepSeek 不提供 embedding 服务。"
+                    "请注册硅基流动 https://siliconflow.cn 获取免费 embedding API Key"
+                )
+
+        return warnings
+
 
 config = Config()

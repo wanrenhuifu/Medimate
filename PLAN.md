@@ -318,38 +318,52 @@ class SSEEvent(BaseModel):
 ### Step 5: `backend/rag/embedding.py`
 
 ```python
-"""嵌入模型封装 — 通过 API 调用（兼容 OpenAI embedding 接口格式）。
+"""嵌入模型封装 — 通过 API 调用（兼容 OpenAI 接口格式）。
 
-支持的服务商：
-  - 硅基流动 SiliconFlow：https://api.siliconflow.cn/v1（免费额度，推荐）
+支持任意兼容 OpenAI embedding API 的服务商：
   - 阿里云 DashScope：https://dashscope.aliyuncs.com/compatible-mode/v1
+  - 硅基流动 SiliconFlow：https://api.siliconflow.cn/v1（免费额度）
   - 智谱 AI：https://open.bigmodel.cn/api/paas/v4
+  - OpenAI：https://api.openai.com/v1
 
-配置：在 .env 中设置 EMBEDDING_API_KEY / EMBEDDING_BASE_URL / EMBEDDING_MODEL / EMBEDDING_DIM
+配置方式：在 .env 中设置 EMBEDDING_API_KEY / EMBEDDING_BASE_URL / EMBEDDING_MODEL
 """
-from openai import OpenAI
+from openai import AsyncOpenAI
 from config import config
 
 
 class Embedder:
+    """文本嵌入器（异步 API 模式）。"""
+
     def __init__(self):
-        self._client = OpenAI(
-            api_key=config.embedding_api_key or config.deepseek_api_key,
-            base_url=config.embedding_base_url or config.deepseek_base_url,
-        )
+        # Fallback: 如果 embedding 专用 key 未配置/是占位符，回退到 DeepSeek key
+        api_key = config.embedding_api_key
+        base_url = config.embedding_base_url
+        if not api_key or "sk-your" in api_key:
+            api_key = config.deepseek_api_key
+        if not base_url:
+            base_url = config.deepseek_base_url
+
+        self._client = AsyncOpenAI(api_key=api_key, base_url=base_url)
         self._model = config.embedding_model
         self._dim = config.embedding_dim
+        print(f"Embedding API: {base_url}")
+        print(f"Embedding model: {self._model}, dim={self._dim}")
 
     @property
     def dimension(self) -> int:
         return self._dim
 
-    def embed(self, text: str) -> list[float]:
-        resp = self._client.embeddings.create(model=self._model, input=text)
+    async def embed(self, text: str) -> list[float]:
+        resp = await self._client.embeddings.create(
+            model=self._model, input=text
+        )
         return resp.data[0].embedding
 
-    def embed_batch(self, texts: list[str]) -> list[list[float]]:
-        resp = self._client.embeddings.create(model=self._model, input=texts)
+    async def embed_batch(self, texts: list[str]) -> list[list[float]]:
+        resp = await self._client.embeddings.create(
+            model=self._model, input=texts
+        )
         return [d.embedding for d in resp.data]
 
 
@@ -704,27 +718,49 @@ from config import config
 
 async def index_documents(input_dir: str, batch_size: int = 32):
     """扫描目录下所有说明书文件，切片、嵌入、入库。"""
+    print(f"Connecting to Supabase...")
     await init_pg(config.supabase_db_url, vector_dim=embedder.dimension)
 
     files = glob.glob(os.path.join(input_dir, "**/*.txt"), recursive=True)
-    print(f"Found {len(files)} documents to index")
+    if not files:
+        print(f"No .txt files found in {input_dir}")
+        print("Put drug package insert text files in data/package_inserts/")
+        print("Naming convention: [Chinese drug name].txt")
+        return
+
+    print(f"Found {len(files)} documents")
 
     all_chunks = []
-    for filepath in files:
-        # 从文件名解析药物名称（约定：文件名 = 中文名.txt）
+    for filepath in sorted(files):
         basename = os.path.splitext(os.path.basename(filepath))[0]
-        chunks = chunk_document(filepath, drug_name_cn=basename)
-        all_chunks.extend(chunks)
-        print(f"  {basename}: {len(chunks)} chunks")
+        try:
+            chunks = chunk_document(filepath, drug_name_cn=basename)
+            all_chunks.extend(chunks)
+            print(f"  {basename}: {len(chunks)} chunks")
+        except Exception as e:
+            print(f"  [SKIP] {basename}: {e}")
 
-    # 批量嵌入
+    if not all_chunks:
+        print("No chunks generated. Check input files.")
+        return
+
     texts = [c["text"] for c in all_chunks]
-    print(f"Embedding {len(texts)} chunks with {embedder._model}...")
-    embeddings = embedder.embed_batch(texts)
+    print(f"Embedding {len(texts)} chunks in batches of {batch_size}...")
+
+    # 分批嵌入，避免单次 API 请求超限
+    embeddings = []
+    for i in range(0, len(texts), batch_size):
+        batch = texts[i:i + batch_size]
+        print(f"  batch {i // batch_size + 1}/{(len(texts) + batch_size - 1) // batch_size}: {len(batch)} texts")
+        batch_embeddings = await embedder.embed_batch(batch)
+        embeddings.extend(batch_embeddings)
 
     # 批量入库
     pool = await get_pool()
     async with pool.acquire() as conn:
+        # 清空旧数据（幂等重导入）
+        await conn.execute("TRUNCATE drug_chunks")
+
         for i, chunk in enumerate(all_chunks):
             meta = chunk["meta"]
             await conn.execute(
@@ -740,16 +776,28 @@ async def index_documents(input_dir: str, batch_size: int = 32):
                 meta["source"],
                 str(embeddings[i]),
             )
-        print(f"Indexed {len(all_chunks)} chunks into pgvector")
+
+        # 重建 IVFFlat 索引
+        try:
+            await conn.execute("DROP INDEX IF EXISTS idx_drug_chunks_embedding")
+            await conn.execute(
+                "CREATE INDEX idx_drug_chunks_embedding ON drug_chunks USING ivfflat (embedding vector_cosine_ops)"
+            )
+        except Exception:
+            pass  # 数据太少时 IVFFlat 可能失败
+
+    print(f"Done: {len(all_chunks)} chunks indexed")
+    await close_pg()
 
 
-async def main():
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--input_dir", default="data/package_inserts")
     parser.add_argument("--batch_size", type=int, default=32)
     args = parser.parse_args()
-    await index_documents(args.input_dir, args.batch_size)
-    await close_pg()
+
+    import asyncio
+    asyncio.run(index_documents(args.input_dir, args.batch_size))
 
 
 if __name__ == "__main__":

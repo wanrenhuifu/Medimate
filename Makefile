@@ -1,4 +1,8 @@
-.PHONY: dev-backend dev-frontend dev
+.PHONY: dev-backend dev-frontend dev init-data
+
+# 导入药品说明书数据到 RAG 向量库（首次运行或数据更新时执行）
+init-data:
+	cd backend && python -m rag.pipeline --input_dir data/package_inserts
 
 # 开发模式启动后端
 dev-backend:

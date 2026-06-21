@@ -22,6 +22,15 @@ from tools.sideeffects import query_side_effects
 from tools.medlist import manage_medication_list, set_medlist_repo
 from models.types import ChatRequest
 
+# 启动时检查配置
+_config_warnings = config.validate()
+if _config_warnings:
+    print("=" * 50)
+    print("⚠️  配置警告：")
+    for w in _config_warnings:
+        print(f"  - {w}")
+    print("=" * 50)
+
 session_store = SessionStore()
 agent: Agent | None = None
 medlist_repo: MedListRepo | None = None
